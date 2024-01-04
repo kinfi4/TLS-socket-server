@@ -26,31 +26,37 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
             "master_secret": None,
             "server_public_key": None,
         }
+        self.communication_socket: socket.socket = None
 
         self._logger = logging.getLogger(__name__)
 
     def tls_handshake(self) -> None:
-        client_socket = self._connect()
-        self._send_client_hello(client_socket)
+        self._connect()
+        self._send_client_hello()
 
-        self._receive_server_hello(client_socket)
+        self._receive_server_hello()
 
-        self._send_pre_master(client_socket)
+        self._send_pre_master()
 
         self._generate_master_key()
 
-        self._get_handshake_complete_message(client_socket)
-        self._send_handshake_complete_message(client_socket)
+        self._get_handshake_complete_message()
+        self._send_handshake_complete_message()
 
         self._logger.info(f"Handshake with server complete")
 
-    def _connect(self) -> socket.socket:
+    def send_messages(self) -> None:
+        for message in ["HELLO", "world", "man", "it's working"]:
+            encrypted_message = self.encrypt_message(message, self.config["master_secret"])
+            self.communication_socket.sendall(encrypted_message)
+
+    def _connect(self) -> None:
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         client_socket.connect((self.host, self.port))
 
-        return client_socket
+        self.communication_socket = client_socket
 
-    def _send_client_hello(self, client_socket: socket.socket) -> None:
+    def _send_client_hello(self) -> None:
         client_random = os.urandom(16)
         self.config["client_random"] = client_random
 
@@ -66,10 +72,10 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
 
         self._logger.debug(f"Sending client hello: {tls_hello_dump}")
 
-        client_socket.sendall(tls_hello_dump.encode("utf-8"))
+        self.communication_socket.sendall(tls_hello_dump.encode("utf-8"))
 
-    def _receive_server_hello(self, client_socket: socket.socket) -> None:
-        server_hello_data = client_socket.recv(1024).decode("utf-8")
+    def _receive_server_hello(self) -> None:
+        server_hello_data = self.communication_socket.recv(1024).decode("utf-8")
         server_hello = json.loads(server_hello_data)
 
         self._logger.debug(f"Received server hello: {server_hello_data}")
@@ -87,7 +93,7 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
         )
         self.config["server_public_key"] = public_key
 
-    def _send_pre_master(self, client_socket: socket.socket) -> None:
+    def _send_pre_master(self) -> None:
         premaster_bytes = os.urandom(32)
         self.config["premaster_secret"] = premaster_bytes
 
@@ -107,7 +113,7 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
             "encrypted_pre_master_secret": encrypted_premaster_encoded
         }).encode("utf-8")
 
-        client_socket.sendall(payload)
+        self.communication_socket.sendall(payload)
 
     def _generate_master_key(self) -> None:
         if self.config["premaster_secret"] is None or self.config["server_random"] is None or self.config["client_random"] is None:
@@ -123,15 +129,15 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
 
         self.config["master_secret"] = master_key
 
-    def _get_handshake_complete_message(self, client_socket: socket.socket) -> None:
-        server_complete_message = client_socket.recv(1024)
+    def _get_handshake_complete_message(self) -> None:
+        server_complete_message = self.communication_socket.recv(1024)
         decrypted_message = self.decrypt_message(server_complete_message, self.config["master_secret"])
 
         if decrypted_message != "COMPLETE":
             raise ValueError("Client did not send correct COMPLETE message")
 
-    def _send_handshake_complete_message(self, client_socket: socket.socket) -> None:
+    def _send_handshake_complete_message(self) -> None:
         message = "COMPLETE"
         encrypted_message = self.encrypt_message(message, self.config["master_secret"])
 
-        client_socket.sendall(encrypted_message)
+        self.communication_socket.sendall(encrypted_message)
