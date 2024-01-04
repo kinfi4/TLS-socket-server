@@ -80,7 +80,22 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
         self._logger.info(f"Handshake with {self.sessions[session_id]['address']} complete")
 
     def handle_secure_data(self, session_id: bytes, client_socket: socket.socket) -> None:
-        pass
+        while True:
+            try:
+                encrypted_message = client_socket.recv(1024)
+
+                if not encrypted_message:
+                    continue
+
+                decrypted_message = self.decrypt_message(encrypted_message, self.sessions[session_id]["master_secret"])
+
+                self._logger.info(f"Received message: {decrypted_message}")
+
+                if decrypted_message == "CLOSE":
+                    break
+            except Exception as e:
+                self._logger.error(f"Error handling secure data from {self.sessions[session_id]['address']}: {e}")
+                break
 
     def _send_encryption_complete(self, session_id: bytes, client_socket: socket.socket) -> None:
         message = "COMPLETE"

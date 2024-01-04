@@ -1,8 +1,9 @@
-import base64
-import json
 import os
+import json
+import base64
 import socket
 import logging
+from time import sleep
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -26,7 +27,8 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
             "master_secret": None,
             "server_public_key": None,
         }
-        self.communication_socket: socket.socket = None
+        self.communication_socket: socket.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.communication_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
         self._logger = logging.getLogger(__name__)
 
@@ -47,14 +49,10 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
 
     def send_messages(self) -> None:
         for message in ["HELLO", "world", "man", "it's working"]:
-            encrypted_message = self.encrypt_message(message, self.config["master_secret"])
-            self.communication_socket.sendall(encrypted_message)
+            self._send_encrypted_message(message)
 
     def _connect(self) -> None:
-        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.connect((self.host, self.port))
-
-        self.communication_socket = client_socket
+        self.communication_socket.connect((self.host, self.port))
 
     def _send_client_hello(self) -> None:
         client_random = os.urandom(16)
@@ -141,3 +139,9 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
         encrypted_message = self.encrypt_message(message, self.config["master_secret"])
 
         self.communication_socket.sendall(encrypted_message)
+
+    def _send_encrypted_message(self, txt: str) -> None:
+        encrypted_message = self.encrypt_message(txt, self.config["master_secret"])
+        self.communication_socket.sendall(encrypted_message)
+
+        sleep(0.001)  # we need it so the socket immediately sends the message
