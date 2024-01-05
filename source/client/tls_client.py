@@ -43,11 +43,11 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
         self._generate_master_key()
 
         self._get_handshake_complete_message()
-        self._send_handshake_complete_message()
+        self._send_encrypted_message("COMPLETE")
 
         self._logger.info(f"Handshake with server complete")
 
-    def send_messages(self) -> None:
+    def send_test_messages(self) -> None:
         for message in ["HELLO", "world", "man", "it's working"]:
             self._send_encrypted_message(message)
 
@@ -133,12 +133,6 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
 
         if decrypted_message != "COMPLETE":
             raise ValueError("Client did not send correct COMPLETE message")
-
-    def _send_handshake_complete_message(self) -> None:
-        message = "COMPLETE"
-        encrypted_message = self.encrypt_message(message, self.config["master_secret"])
-
-        self.communication_socket.sendall(encrypted_message)
 
     def _send_encrypted_message(self, txt: str) -> None:
         encrypted_message = self.encrypt_message(txt, self.config["master_secret"])

@@ -4,11 +4,11 @@ import base64
 import socket
 import logging
 import threading
+from time import sleep
 
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from source.common import AESDecryptorMixin, AESEncryptorMixin
 
@@ -74,7 +74,7 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
 
         self._make_master_secret(session_id)
 
-        self._send_encryption_complete(session_id, client_socket)
+        self._send_encrypted_message(session_id, "COMPLETE")
         self._validate_encryption_complete_from_client(session_id, client_socket)
 
         self._logger.info(f"Handshake with {self.sessions[session_id]['address']} complete")
@@ -88,20 +88,17 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
                     continue
 
                 decrypted_message = self.decrypt_message(encrypted_message, self.sessions[session_id]["master_secret"])
-
-                self._logger.info(f"Received message: {decrypted_message}")
-
-                if decrypted_message == "CLOSE":
-                    break
+                self.handle_decrypted_message(session_id, client_socket, decrypted_message)
             except Exception as e:
                 self._logger.error(f"Error handling secure data from {self.sessions[session_id]['address']}: {e}")
                 break
 
-    def _send_encryption_complete(self, session_id: bytes, client_socket: socket.socket) -> None:
-        message = "COMPLETE"
-        encrypted_message = self.encrypt_message(message, self.sessions[session_id]["master_secret"])
-
-        client_socket.send(encrypted_message)
+    def handle_decrypted_message(self, session_id: bytes, client_socket: socket.socket, decrypted_message: str) -> None:
+        if decrypted_message == "CLOSE":
+            self._logger.info(f"Closing connection with {self.sessions[session_id]['address']}")
+            client_socket.close()
+        else:
+            self._logger.info(f"Received message: {decrypted_message}")
 
     def _validate_encryption_complete_from_client(self, session_id: bytes, client_socket: socket.socket) -> None:
         client_complete_message = client_socket.recv(1024)
@@ -210,6 +207,12 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
         self._logger.debug("The pre-master secret is: " + str(pre_master_secret))
 
         self._update_session(session_id, premaster_secret=pre_master_secret)
+
+    def _send_encrypted_message(self, session_id: bytes, txt: str) -> None:
+        encrypted_message = self.encrypt_message(txt, self.sessions[session_id]["master_secret"])
+        self.sessions[session_id]["socket"].send(encrypted_message)
+
+        sleep(0.001)  # we need it so the socket immediately sends the message
 
     def _start_new_session(self, session_id: bytes, address: str, client_socket: socket.socket) -> None:
         with self.sessions_lock:
