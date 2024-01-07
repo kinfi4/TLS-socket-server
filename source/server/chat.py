@@ -13,6 +13,7 @@ class ChatServer(TLSServer):
         if decrypted_message == "CLOSE":
             self._logger.info(f"User {self.sessions[session_id]['username']} disconnected")
             client_socket.close()
+            del self.sessions[session_id]
             return
 
         self._handle_chat_message(session_id, decrypted_message)
@@ -22,7 +23,8 @@ class ChatServer(TLSServer):
             self._send_encrypted_message(session_id, "SERVER ERROR: Invalid message format")
             return
 
-        recipient_username, message = decrypted_message.split(":")
+        recipient_username, *message = decrypted_message.split(":")
+        message = ":".join(message)
 
         self._logger.info(f"Sending message from {self.sessions[session_id]['username']}: to {recipient_username}")
 
@@ -45,5 +47,4 @@ class ChatServer(TLSServer):
         return None
 
     def _validate_message(self, message: str) -> bool:
-        split_message = message.split(":")
-        return len(split_message) == 2 and split_message[0] != "" and split_message[1] != ""
+        return ":" in message

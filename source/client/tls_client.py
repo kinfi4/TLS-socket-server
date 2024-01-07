@@ -107,9 +107,7 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
 
         encrypted_premaster_encoded = base64.b64encode(encrypted_premaster).decode("ascii")
 
-        payload = json.dumps({
-            "encrypted_pre_master_secret": encrypted_premaster_encoded
-        }).encode("utf-8")
+        payload = json.dumps({"encrypted_pre_master_secret": encrypted_premaster_encoded}).encode("utf-8")
 
         self.communication_socket.sendall(payload)
 
@@ -122,8 +120,6 @@ class TLSConnectClient(AESDecryptorMixin, AESEncryptorMixin):
         digest.update(self.config["client_random"])
         digest.update(self.config["server_random"])
         master_key = digest.finalize()
-
-        self._logger.debug("The master secret is: " + str(master_key))
 
         self.config["master_secret"] = master_key
 

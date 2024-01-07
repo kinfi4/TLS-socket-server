@@ -20,14 +20,11 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
         self,
         host: str,
         port: int,
-        timeout__seconds: int = 60*60,
     ) -> None:
         self.host = host
         self.port = port
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sessions = {}
-
-        self._timeout__seconds = timeout__seconds
 
         self._logger = logging.getLogger(__name__)
 
@@ -125,8 +122,6 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
             digest.update(session["server_random"])
             master_key = digest.finalize()
 
-            self._logger.debug("The master secret is: " + str(master_key))
-
             self._update_session(session_id, master_secret=master_key)
 
     def _receive_client_hello(self, session_id: bytes, client_socket: socket.socket) -> None:
@@ -159,7 +154,7 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
         """
         Sends the ServerHello message to the client.
         The ServerHello message format is assumed to be a JSON string containing
-        'tls_version', 'cipher_suite', and 'server_random'.
+        'tls_version', 'cipher_suite', 'server_public_key' and 'server_random'.
         """
 
         server_random = os.urandom(16)
@@ -203,8 +198,6 @@ class TLSServer(AESDecryptorMixin, AESEncryptorMixin):
                 label=None
             ),
         )
-
-        self._logger.debug("The pre-master secret is: " + str(pre_master_secret))
 
         self._update_session(session_id, premaster_secret=pre_master_secret)
 
